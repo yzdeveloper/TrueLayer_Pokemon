@@ -1,7 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using TrueLayer_Pokemon.Services;
 
@@ -22,7 +19,31 @@ namespace TrueLayer_Pokemon.Controllers
         [Route("{name}")]
         public async Task<IActionResult> GetPokemon(string name)
         {
-            return Ok(await _pokemonService.Get(name));
+            var found = await _pokemonService.Get(name);
+            if (found == null)
+            {
+                return NotFound();
+            }
+            else
+            {
+                return Ok(await _pokemonService.Get(name));
+            }
         }
+
+        [HttpGet()]
+        [Route("translated/{name}")]
+        public async Task<IActionResult> GetPokemonTranslated(string name)
+        {
+            var found = await _pokemonService.GetTranslated(name);
+            if (found == null)
+            {
+                return NotFound();
+            }
+            else
+            {
+                return Ok(found);
+            }
+        }
+
     }
 }

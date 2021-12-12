@@ -34,8 +34,12 @@ namespace TrueLayer_Pokemon
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "TrueLayer_Pokemon", Version = "v1" });
             });
 
-            services.AddSingleton<IPokemonService, PokemonService>();
+            services.AddSingleton<IHttpService, HttpService>();
             services.AddSingleton<IPokemonParser, PokemonParser>();
+            services.AddSingleton<IPokemonService, PokemonService>();
+            services.AddSingleton<IPokemonService, PokemonService>();
+            services.AddSingleton<ITranslationParser, TranslationParser>();
+            services.AddSingleton<ITranslationService, TranslationService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

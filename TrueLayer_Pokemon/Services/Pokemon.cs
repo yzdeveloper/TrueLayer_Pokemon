@@ -1,5 +1,8 @@
 ﻿namespace TrueLayer_Pokemon.Services
 {
+    /// <summary>
+    /// Pokemon DTO
+    /// </summary>
     public class Pokemon
     {
         public string Name { get; set; }

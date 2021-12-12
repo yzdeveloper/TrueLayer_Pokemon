@@ -2,6 +2,7 @@ using Moq;
 using System;
 using System.Net;
 using System.Text.Json;
+using System.Threading.Tasks;
 using TrueLayer_Pokemon.Services;
 using Xunit;
 
@@ -11,72 +12,108 @@ namespace TrueLayer_PokemonTests
     {
         private static readonly Random _rnd = new();
 
-        [Fact]
-        public async void WhenGetWithRandomName_ThenNull()
+        #region Get/Translated
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async void WhenGet_ThenUrlGenerated(bool translated)
         {
-            // Given 
+            // Given
             var mockParser = new Mock<IPokemonParser>();
-            var target = new PokemonService(mockParser.Object);
-            var name = Guid.NewGuid().ToString();
+            var mockHttp = new Mock<IHttpService>();
+            var mockTranslator = new Mock<ITranslationService>();
+            var randomName = Guid.NewGuid().ToString();
+            var expectedUrl = $@"https://pokeapi.co/api/v2/pokemon-species/{randomName}";
+            var target = new PokemonService(mockParser.Object, mockTranslator.Object, mockHttp.Object);
 
             // When
-            var result = await target.Get(name);
+            var method = translated ? target.GetTranslated : (Func<string, Task<Pokemon>>)target.Get;
+            var res = await method(randomName);
 
             // Then
-            Assert.Null(result);
-            mockParser.Verify(p => p.ToPokemon(It.IsAny<string>()), Times.Never);
+            mockHttp.Verify(h => h.Get(expectedUrl), Times.Once);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async void WhenGet_ThenPokemonParserGetFromHttpServie(bool translated)
+        {
+            // Given
+            var mockParser = new Mock<IPokemonParser>();
+            var mockHttp = new Mock<IHttpService>();
+            var expectedJson = Guid.NewGuid().ToString();
+            mockHttp.Setup(h => h.Get(It.IsAny<string>())).Returns(Task.FromResult(expectedJson));
+            var mockTranslator = new Mock<ITranslationService>();
+            var randomName = Guid.NewGuid().ToString();
+            var target = new PokemonService(mockParser.Object, mockTranslator.Object, mockHttp.Object);
+
+            // When
+            var method = translated ? target.GetTranslated : (Func<string, Task<Pokemon>>)target.Get;
+            var res = await method(randomName);
+
+            // Then
+            mockParser.Verify(h => h.ToPokemon(expectedJson), Times.Once);
         }
 
         [Fact]
-        public async void WhenGetWithKnownName_ThenNotNull()
+        public async void WhenGet_ThenAsFremParser()
         {
-            // Given 
-            var target = new PokemonService(new PokemonParser());
-            var name = "wormadam";
+            // Given
+            var mockParser = new Mock<IPokemonParser>();
+            var expectedPokemon = new Pokemon();
+            mockParser.Setup(h => h.ToPokemon(It.IsAny<string>())).Returns(expectedPokemon);
+            var mockHttp = new Mock<IHttpService>();
+            var mockTranslator = new Mock<ITranslationService>();
+            var randomName = Guid.NewGuid().ToString();
+            var target = new PokemonService(mockParser.Object, mockTranslator.Object, mockHttp.Object);
 
             // When
-            var result = await target.Get(name);
+            var ret = await target.Get(randomName);
 
             // Then
-            Assert.NotNull(result);
-            Assert.Equal(name, result.Name);
-            Assert.False(result.IsLegendary);
-            Assert.Null(result.Habitat);
-            Assert.NotNull(result.Description);
+            Assert.Same(expectedPokemon, ret);
         }
 
         [Fact]
-        public async void WhenGetWithKnownName_ThenAsParsed()
+        public async void WhenTranslated_ThenTranslatedServiceCalled()
         {
-            // Given 
+            // Given
             var mockParser = new Mock<IPokemonParser>();
-            var pokemon = new Pokemon
+            var mockTranslation = new Mock<ITranslationService>();
+            var mockHttp = new Mock<IHttpService>();
+            var testPokemon = new Pokemon
             {
                 Description = Guid.NewGuid().ToString(),
                 Habitat = Guid.NewGuid().ToString(),
-                IsLegendary = _rnd.Next() % 2 == 0,
+                IsLegendary = _rnd.Next(2) == 0,
                 Name = Guid.NewGuid().ToString()
             };
-            mockParser.Setup(p => p.ToPokemon(It.IsAny<string>())).Returns(pokemon);
-
-            var target = new PokemonService(mockParser.Object);
-            var name = "wormadam";
+            mockTranslation.Setup(t => t.Translate(It.IsAny<Pokemon>())).Returns(Task.FromResult(testPokemon));
+            var target = new PokemonService(mockParser.Object, mockTranslation.Object, mockHttp.Object);
 
             // When
-            var result = await target.Get(name);
+            var result = await target.GetTranslated(Guid.NewGuid().ToString());
 
             // Then
             Assert.NotNull(result);
-            Assert.Equal(pokemon.Name, result.Name);
-            Assert.Equal(pokemon.IsLegendary, result.IsLegendary);
-            Assert.Equal(pokemon.Habitat, result.Habitat);
-            Assert.Equal(pokemon.Description, result.Description);
+            Assert.Equal(testPokemon.Name, result.Name);
+            Assert.Equal(testPokemon.IsLegendary, result.IsLegendary);
+            Assert.Equal(testPokemon.Habitat, result.Habitat);
+            Assert.Equal(testPokemon.Description, result.Description);
         }
+
+        #endregion
+
+        #region Experiments
 
         //[Fact]
         internal async void Find_Legendary()
         {
-            var service = new PokemonService(new PokemonParser());
+            var httpService = new HttpService();
+            var service = new PokemonService(new PokemonParser(), new TranslationService(httpService, new TranslationParser()), 
+                httpService);
             using var wc = new WebClient();
             var url = "https://pokeapi.co/api/v2/pokemon-species";
 
@@ -88,13 +125,32 @@ namespace TrueLayer_PokemonTests
                 foreach (var r in doc.RootElement.GetProperty("results").EnumerateArray())
                 {
                     var p = await service.Get(r.GetProperty("name").GetString());
-                    if (p.IsLegendary)
+
+                    if (p.IsLegendary && p.Habitat == "cave")
                     {
                         // found
                     }
+
+                    if (p.Habitat == "cave" && !p.IsLegendary)
+                    {
+                        // found
+                    }
+
+                    if (p.Habitat != "cave" && p.IsLegendary)
+                    {
+                        // found
+                    }
+
+                    if (p.Habitat != "cave" && !p.IsLegendary)
+                    {
+                        // found
+                    }
+
                 }
 
             } while (url != null);
         }
+
+        #endregion
     }
 }

@@ -3,8 +3,16 @@ using System.Text.Json;
 
 namespace TrueLayer_Pokemon.Services
 {
+    /// <summary>
+    /// Pokemon service response parser
+    /// </summary>
     public class PokemonParser : IPokemonParser
     {
+        /// <summary>
+        /// Parse pokemon from json string 
+        /// </summary>
+        /// <param name="result">json string</param>
+        /// <returns>Pokemon object</returns>
         public Pokemon ToPokemon(string result)
         {
             var jDoc = JsonDocument.Parse(result);
@@ -17,6 +25,8 @@ namespace TrueLayer_Pokemon.Services
                 IsLegendary = GetLegendary(jDoc)
             };
         }
+
+        #region Private
 
         private static bool GetLegendary(JsonDocument jDoc)
         {
@@ -70,5 +80,7 @@ namespace TrueLayer_Pokemon.Services
             jDoc.RootElement.TryGetProperty("name", out JsonElement name);
             return name.GetString();
         }
+
+        #endregion
     }
 }
